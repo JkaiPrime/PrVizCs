@@ -1,4 +1,4 @@
-# Projeto: Aplicação Web para Análise de Dados e Predição com Machine Learning
+# PrVizCs: Aplicação Web para Análise de Dados e Predição com Machine Learning
 
 ---
 
