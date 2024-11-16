@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resultados</title>
+</head>
+<body>
+    <h1>Resultados</h1>
+    {% if correlation_plot %}
+    <h2>Correlação: Preço vs Avaliação</h2>
+    <img src="{{ correlation_plot }}" alt="Gráfico de correlação">
+    {% else %}
+    <p>Não foi possível gerar o gráfico de correlação.</p>
+    {% endif %}
+</body>
+</html>
