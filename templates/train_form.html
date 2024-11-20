@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treinar Modelo</title>
+</head>
+<body>
+    <h1>Treinamento do Modelo</h1>
+    <form method="POST">
+        <label for="model_type">Escolha o modelo:</label>
+        <select name="model_type" id="model_type">
+            <option value="RandomForest">Random Forest</option>
+            <option value="LogisticRegression">Logistic Regression</option>
+            <option value="SVM">Support Vector Machine (SVM)</option>
+            <option value="DecisionTree">Decision Tree</option>
+            <option value="GradientBoosting">Gradient Boosting</option>
+            <option value="KNN">K-Nearest Neighbors</option>
+        </select>
+        <br>
+        <label for="n_estimators">Número de Estimadores (se aplicável):</label>
+        <input type="number" name="n_estimators" id="n_estimators" value="100">
+        <br>
+        <label for="max_depth">Profundidade Máxima (se aplicável):</label>
+        <input type="number" name="max_depth" id="max_depth">
+        <br>
+        <button type="submit">Treinar Modelo</button>
+    </form>
+</body>
+</html>

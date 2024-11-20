@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise de Dados</title>
+</head>
+<body>
+    <h1>Análise de Dados</h1>
+    
+    <h2>Estatísticas Descritivas</h2>
+    {{ stats|safe }}
+
+    <h2>Gráfico de Correlação</h2>
+    <img src="{{ correlation_plot }}" alt="Gráfico de correlação">
+
+    <a href="/">Voltar à página inicial</a>
+</body>
+</html>
