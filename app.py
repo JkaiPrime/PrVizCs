@@ -2,15 +2,15 @@ from flask import Flask, render_template, request, redirect, send_file, url_for
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
+import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
+import joblib
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MODEL_FOLDER'] = 'models'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(app.config['MODEL_FOLDER'], exist_ok=True)
 
 @app.route('/')
 def index():
@@ -36,16 +36,19 @@ def upload_file():
 def analyze(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     try:
-        # Carregar dados
         df = pd.read_csv(filepath)
+        stats = df.describe(include='all').to_html(classes='table table-striped', border=0)
 
-        # Estatísticas descritivas
-        stats = df.describe().to_html(classes='table table-striped', border=0)
+        # Pré-processar dados
+        # Excluir colunas não numéricas ou converter para categórico se necessário
+        numeric_df = df.select_dtypes(include=['number'])
+        if numeric_df.empty:
+            return "Erro: Não há colunas numéricas para análise de correlação.", 400
 
-        # Criar gráfico de correlação
+        # Criar heatmap de correlação
         correlation_plot_path = os.path.join('static', f'correlation_{filename}.png')
         plt.figure(figsize=(10, 8))
-        pd.plotting.scatter_matrix(df, alpha=0.2, figsize=(15, 10))
+        sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt='.2f')
         plt.savefig(correlation_plot_path)
         plt.close()
 
@@ -53,9 +56,6 @@ def analyze(filename):
     except Exception as e:
         return f"Erro ao analisar os dados: {e}", 500
 
-
-
-from flask import request
 
 @app.route('/train/<filename>', methods=['GET', 'POST'])
 def train(filename):
@@ -68,51 +68,45 @@ def train(filename):
 
     # Pré-processamento: lidar com colunas categóricas
     for column in X.select_dtypes(include='object').columns:
-        X[column] = X[column].astype('category').cat.codes  # Converte para números
+        X[column] = X[column].astype('category').cat.codes
     
-    if y.dtype == 'object':  # Converter y se for categórico
+    if y.dtype == 'object':
         y = y.astype('category').cat.codes
 
     if request.method == 'POST':
         model_type = request.form.get('model_type', 'RandomForest')
         n_estimators = int(request.form.get('n_estimators', 100))
 
-        # Escolher o modelo
         if model_type == 'RandomForest':
-            from sklearn.ensemble import RandomForestClassifier
             model = RandomForestClassifier(n_estimators=n_estimators, random_state=42)
-        elif model_type == 'LogisticRegression':
-            from sklearn.linear_model import LogisticRegression
-            model = LogisticRegression(max_iter=1000, random_state=42)
-        elif model_type == 'SVM':
-            from sklearn.svm import SVC
-            model = SVC(kernel='rbf', random_state=42)
         else:
             return f"Modelo '{model_type}' não suportado.", 400
 
-        # Treinar o modelo
         model.fit(X, y)
-
-        # Avaliar o modelo
         accuracy = model.score(X, y)
-        model_path = f"/download_model/{model_type}_model.pkl"
 
-        return render_template('train_result.html', accuracy=accuracy, model_type=model_type)
+        model_path = os.path.join(app.config['MODEL_FOLDER'], f"{model_type}_model.pkl")
+        joblib.dump(model, model_path)
 
-    # Renderizar o formulário para escolha do modelo
+        return render_template('train_result.html', accuracy=accuracy, model_type=model_type, model_path=model_path)
+
     return render_template('train_form.html', filename=filename)
 
-
-
-@app.route('/download_model/<filename>')
+@app.route('/download_model/<path:filename>')
 def download_model(filename):
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    filepath = os.path.join(app.config['MODEL_FOLDER'], filename)
     try:
         return send_file(filepath, as_attachment=True)
     except FileNotFoundError:
         return f"Erro: O arquivo {filename} não foi encontrado.", 404
 
+@app.route('/retrain/<filename>', methods=['POST'])
+def retrain(filename):
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.exists(filepath):
+        return "Arquivo de dados não encontrado.", 404
 
+    return redirect(url_for('train', filename=filename))
 
 if __name__ == '__main__':
     app.run(debug=True)
