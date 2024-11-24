@@ -71,7 +71,8 @@
             border: 1px solid #444;
         }
 
-        .table-striped th, .table-striped td {
+        .table-striped th,
+        .table-striped td {
             padding: 0.75rem;
             text-align: center;
         }
@@ -85,18 +86,32 @@
                 <h1 class="mb-0" style="color: white;"><i class="fas fa-chart-line"></i> Análise de Dados</h1>
             </div>
             <div class="card-body">
+                <!-- Estatísticas Descritivas -->
                 <section>
-                    <h2 class="mb-3" style="color: white; justify-self:center;"><i class="fas fa-table"></i> Estatísticas Descritivas</h2>
-                    <div class="bg-dark p-3 rounded" style="width: fit-content;">
+                    <h2 class="mb-3" style="color: white;"><i class="fas fa-table"></i> Estatísticas Descritivas</h2>
+                    <div class="bg-dark p-3 rounded" style="overflow-x: auto;">
                         {{ stats|safe }}
                     </div>
                 </section>
 
-                <section class="mt-4" style="place-items: center;">
+                <!-- Gráfico de Correlação -->
+                {% if correlation_plot %}
+                <section class="mt-4 text-center">
                     <h2 class="mb-3" style="color: white;"><i class="fas fa-chart-bar"></i> Gráfico de Correlação</h2>
                     <img src="{{ correlation_plot }}" alt="Gráfico de correlação" class="img-fluid">
                 </section>
+                {% endif %}
 
+                <div class="text-center mt-4">
+                    <!-- Botão para treinar o modelo -->
+                    <form action="{{ url_for('train', filename=filename) }}" method="get">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-cogs"></i> Treinar Modelo
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Botão de Voltar -->
                 <div class="text-center mt-4">
                     <a href="/" class="btn btn-primary">
                         <i class="fas fa-arrow-left"></i> Voltar à página inicial
@@ -110,4 +125,3 @@
 </body>
 
 </html>
-
