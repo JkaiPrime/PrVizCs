@@ -162,8 +162,10 @@ def train(filename):
                 'train_result.html',
                 accuracy=accuracy,
                 model_type=model_type,
-                model_path=url_for('download_model', model_type=model_type)
+                model_path=url_for('download_model', model_type=model_type, filename=filename),  # Adição do filename
+                filename=filename  # Adicionando filename ao contexto
             )
+
 
         except Exception as e:
             logging.error(f"Erro durante o treinamento do modelo '{model_type}': {e}")
@@ -172,17 +174,72 @@ def train(filename):
     return render_template('train_form.html', filename=filename)
 
 
-@app.route('/download_model/<model_type>', methods=['GET'])
-def download_model(model_type):
+@app.route('/predict', methods=['GET', 'POST'])
+def predict():
+    if request.method == 'POST':
+        # Verificar se os arquivos foram enviados
+        if 'data_file' not in request.files or 'model_file' not in request.files:
+            return "Arquivos de dados ou modelo ausentes.", 400
+
+        data_file = request.files['data_file']
+        model_file = request.files['model_file']
+
+        # Validar os nomes dos arquivos
+        if data_file.filename == '' or model_file.filename == '':
+            return "Nome do arquivo inválido.", 400
+
+        # Verificar formatos de arquivos
+        if not data_file.filename.endswith('.csv') or not model_file.filename.endswith('.pkl'):
+            return "Formato de arquivo inválido. Envie um arquivo CSV para dados e um arquivo PKL para o modelo.", 400
+
+        # Salvar os arquivos no servidor
+        data_filepath = os.path.join(app.config['UPLOAD_FOLDER'], data_file.filename)
+        model_filepath = os.path.join(app.config['UPLOAD_FOLDER'], model_file.filename)
+        data_file.save(data_filepath)
+        model_file.save(model_filepath)
+
+        try:
+            # Carregar o arquivo de dados
+            df = pd.read_csv(data_filepath)
+
+            # Carregar o modelo
+            model = joblib.load(model_filepath)
+
+            # Pré-processamento dos dados (igual ao usado no treinamento)
+            for column in df.select_dtypes(include='object').columns:
+                df[column] = df[column].astype('category').cat.codes
+
+            # Fazer predições
+            predictions = model.predict(df)
+
+            # Adicionar predições ao DataFrame
+            df['Prediction'] = predictions
+
+            # Salvar os resultados em um arquivo CSV
+            result_path = os.path.join(app.config['UPLOAD_FOLDER'], 'predictions.csv')
+            df.to_csv(result_path, index=False)
+
+            return send_file(result_path, as_attachment=True)
+
+        except Exception as e:
+            return f"Erro ao realizar a predição: {e}", 500
+
+    return render_template('predict.html')
+
+
+
+@app.route('/download_model/<model_type>/<filename>', methods=['GET'])
+def download_model(model_type, filename):
     # Construir o caminho completo para o arquivo do modelo
-    filename = f"{model_type}_model.pkl"
-    filepath = os.path.join(app.config['MODEL_FOLDER'], filename)
-    
+    model_filename = f"{model_type}_model.pkl"
+    model_filepath = os.path.join(app.config['MODEL_FOLDER'], model_filename)
+
     # Verificar se o modelo existe antes de tentar baixá-lo
-    if os.path.exists(filepath):
-        return send_file(filepath, as_attachment=True)
+    if os.path.exists(model_filepath):
+        return send_file(model_filepath, as_attachment=True)
     else:
         return f"Erro: O modelo '{model_type}' não foi encontrado. Certifique-se de que ele foi treinado primeiro.", 404
+
 
 
 @app.route('/retrain/<filename>', methods=['POST'])
