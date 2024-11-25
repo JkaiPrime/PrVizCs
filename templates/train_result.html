@@ -60,7 +60,7 @@
                         <i class="fas fa-arrow-left"></i> Voltar à Página Inicial
                     </a>
                 </div>
-                <form action="{{ url_for('train', filename=filename) }}" method="get" class="d-inline-block">
+                <form action="{{ url_for('upload_new_csv', filename=filename) }}" method="get" class="d-inline-block">
                     <button type="submit" class="btn btn-warning me-2">
                         <i class="fas fa-redo-alt"></i> Retreinar Modelo
                     </button>

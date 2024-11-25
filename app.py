@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, send_file, url_for
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
+import seaborn as sns # type: ignore
 from sklearn.ensemble import RandomForestClassifier
 import joblib
 import logging
@@ -242,13 +242,27 @@ def download_model(model_type, filename):
 
 
 
-@app.route('/retrain/<filename>', methods=['POST'])
-def retrain(filename):
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if not os.path.exists(filepath):
-        return "Arquivo de dados não encontrado.", 404
+@app.route('/upload_new_csv/<filename>', methods=['GET', 'POST'])
+def upload_new_csv(filename):
+    if request.method == 'POST':
+        # Verificar se um novo arquivo foi enviado
+        if 'file' not in request.files:
+            return "Nenhum arquivo enviado.", 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return "Nome do arquivo inválido.", 400
+        
+        if file and file.filename.endswith('.csv'):
+            new_filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+            file.save(new_filepath)
 
-    return redirect(url_for('train', filename=filename))
+            # Redirecionar para o treinamento com o novo arquivo
+            return redirect(url_for('train', filename=file.filename))
+
+        return "Formato de arquivo inválido. Envie um arquivo CSV.", 400
+
+    return render_template('upload_new_csv.html', filename=filename)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
