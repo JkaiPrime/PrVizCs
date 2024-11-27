@@ -50,8 +50,8 @@
                 <h1 class="mb-0" style="color: white;"><i class="fas fa-chart-line"></i> Resultados do Treinamento</h1>
             </div>
             <div class="card-body text-center">
-                <p class="fs-4">O modelo <strong>{{ model_type }}</strong> foi treinado com uma precisão de <strong>{{ accuracy }}</strong>.</p>
-                <p class="fs-5">O modelo treinado está disponível para download:</p>
+                <p class="fs-4" style="color: white;">O modelo <strong>{{ model_type }}</strong> foi treinado com uma precisão de <strong>{{ accuracy }}</strong>.</p>
+                <p class="fs-5" style="color: white;">O modelo treinado está disponível para download:</p>
                 <a href="{{ model_path }}" class="btn btn-primary mt-3" download>
                     <i class="fas fa-download"></i> Baixar Modelo
                 </a>
@@ -61,7 +61,7 @@
                     </a>
                 </div>
                 <form action="{{ url_for('upload_new_csv', filename=filename) }}" method="get" class="d-inline-block">
-                    <button type="submit" class="btn btn-warning me-2">
+                    <button type="submit" class="btn btn-warning me-2 mt-2">
                         <i class="fas fa-redo-alt"></i> Retreinar Modelo
                     </button>
                 </form>

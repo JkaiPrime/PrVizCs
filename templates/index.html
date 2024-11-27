@@ -60,7 +60,14 @@
                         <label for="file" class="form-label" style="color: white;">
                             <i class="fas fa-file-csv"></i> Envie seu arquivo CSV:
                         </label>
-                        <input type="file" name="file" id="file" class="form-control">
+                        <input type="file" name="file" id="file" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="column" class="form-label" style="color: white;">
+                            <i class="fas fa-columns"></i> Escolha a coluna para o histograma:
+                        </label>
+                        <input type="text" name="column" id="column" class="form-control" 
+                            placeholder="Digite o nome da coluna" required>
                     </div>
                     <div class="text-center">
                         <button type="submit" class="btn btn-primary">

@@ -102,6 +102,25 @@
                 </section>
                 {% endif %}
 
+                <!-- Gráfico de Correlação -->
+                {% if histogram_plot %}
+                <section class="mt-4 text-center">
+                    <h2 class="mb-3" style="color: white;"><i class="fas fa-chart-bar"></i> Gráfico de histograma</h2>
+                    <img src="{{ histogram_plot }}" alt="Gráfico de histograma" class="img-fluid">
+                </section>
+                {% endif %}
+
+                {% if bar_plot  %}
+                <section class="mt-4 text-center">
+                    <h2>Gráficos Adicionais:</h2>
+                    <img src="{{ bar_plot }}" alt="Bar Plot">
+                    <img src="{{ box_plot }}" alt="Box Plot">
+                    <img src="{{ violin_plot }}" alt="Violin Plot">
+                    <img src="{{ scatter_plot }}" alt="Scatter Plot">
+                    <img src="{{ line_plot }}" alt="Line Plot">
+                </section>
+                {% endif %}
+
                 <div class="text-center mt-4">
                     <!-- Botão para treinar o modelo -->
                     <form action="{{ url_for('train', filename=filename) }}" method="get">

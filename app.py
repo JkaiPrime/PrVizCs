@@ -40,39 +40,75 @@ def upload_file():
         return "Nenhum arquivo enviado.", 400
 
     file = request.files['file']
+    column = request.form['column']
     if file.filename == '':
         return "Nome do arquivo inválido.", 400
 
     if file and file.filename.endswith('.csv'):
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(filepath)
-        return redirect(url_for('analyze', filename=file.filename))
+        return redirect(url_for('analyze', filename=file.filename, column=column))
 
     return "Formato de arquivo inválido. Envie um arquivo CSV.", 400
 
 @app.route('/analyze/<filename>')
 def analyze(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    column = request.args.get('column') 
+    
     try:
+        # Carregar o CSV
         df = pd.read_csv(filepath)
+        
+        # Gerar estatísticas descritivas em HTML
         stats = df.describe(include='all').to_html(classes='table table-striped', border=0)
 
+        # Seleção de dados numéricos
+        numeric_df = df.select_dtypes(include=['number'])
+
+        # Caminhos para salvar gráficos
+        correlation_plot_path = None
+        histogram_plot_path = None
 
         # Heatmap de correlação
-        numeric_df = df.select_dtypes(include=['number'])
-        correlation_plot_path = None
         if not numeric_df.empty:
             correlation_plot_path = os.path.join('static', f'correlation_{filename}.png')
             plt.figure(figsize=(10, 8))
             sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt='.2f')
+            plt.title('Mapa de Correlação')
             plt.savefig(correlation_plot_path)
             plt.close()
 
-        return render_template('analyze.html', stats=stats, correlation_plot=f'/{correlation_plot_path}' if correlation_plot_path else None, filename=filename)
+        if filename == "game_info.csv":
+            additional_plots = save_additional_plots(df)
+
+        # Histograma da coluna, se existir
+        if column in df.columns:
+            histogram_plot_path = os.path.join('static', f'histogram_{filename}.png')
+            plt.figure(figsize=(10, 6))
+            sns.histplot(df[column], kde=True, bins=30, color='skyblue')
+            plt.title(f'Distribuição da coluna: {column}')
+            plt.xlabel(column)
+            plt.ylabel('Frequência')
+            plt.savefig(histogram_plot_path)
+            plt.close()
+
+        # Renderizar página com resultados
+        return render_template(
+            'analyze.html',
+            stats=stats,
+            correlation_plot=correlation_plot_path,
+            histogram_plot=histogram_plot_path,
+            bar_plot=additional_plots['bar_plot'],
+            box_plot=additional_plots['box_plot'],
+            violin_plot=additional_plots['violin_plot'],
+            scatter_plot=additional_plots['scatter_plot'],
+            line_plot=additional_plots['line_plot'],
+            filename=filename
+        )
+
     except Exception as e:
         return f"Erro ao analisar os dados: {e}", 500
-
-
 
 @app.route('/train/<filename>', methods=['GET', 'POST'])
 def train(filename):
@@ -173,7 +209,6 @@ def train(filename):
 
     return render_template('train_form.html', filename=filename)
 
-
 @app.route('/predict', methods=['GET', 'POST'])
 def predict():
     if request.method == 'POST':
@@ -226,8 +261,6 @@ def predict():
 
     return render_template('predict.html')
 
-
-
 @app.route('/download_model/<model_type>/<filename>', methods=['GET'])
 def download_model(model_type, filename):
     # Construir o caminho completo para o arquivo do modelo
@@ -239,8 +272,6 @@ def download_model(model_type, filename):
         return send_file(model_filepath, as_attachment=True)
     else:
         return f"Erro: O modelo '{model_type}' não foi encontrado. Certifique-se de que ele foi treinado primeiro.", 404
-
-
 
 @app.route('/upload_new_csv/<filename>', methods=['GET', 'POST'])
 def upload_new_csv(filename):
@@ -263,6 +294,65 @@ def upload_new_csv(filename):
         return "Formato de arquivo inválido. Envie um arquivo CSV.", 400
 
     return render_template('upload_new_csv.html', filename=filename)
+
+def save_additional_plots(data):
+    plots = {}
+
+    # Gráfico de barras
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.barplot(x='rating', y='metacritic', data=data, ax=ax)
+    ax.set_title('Média de Metacritic por Rating')
+    plots['bar_plot'] = save_plot(fig, 'bar_plot.svg')
+
+    # Boxplot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.boxplot(x='rating_top', y='playtime', data=data, ax=ax)
+    ax.set_title('Distribuição de Playtime por Rating Top')
+    plots['box_plot'] = save_plot(fig, 'box_plot.svg')
+
+    # Scatterplot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.scatterplot(x='achievements_count', y='playtime', hue='platforms', data=data, ax=ax, palette='viridis')
+    ax.set_title('Conquistas vs Playtime por Plataforma')
+    plots['scatter_plot'] = save_plot(fig, 'scatter_plot.svg')
+
+    # Violinplot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.violinplot(x='genres', y='suggestions_count', data=data, ax=ax)
+    ax.set_title('Distribuição de Sugestões por Gênero')
+    plt.xticks(rotation=90)
+    plots['violin_plot'] = save_plot(fig, 'violin_plot.svg')
+
+    # Linha
+    fig, ax = plt.subplots(figsize=(10, 6))
+    data['released'] = pd.to_datetime(data['released'], errors='coerce')
+    data = data.sort_values('released')
+    sns.lineplot(x='released', y='reviews_count', data=data, ax=ax)
+    ax.set_title('Tendência de Reviews ao Longo do Tempo')
+    plt.xticks(rotation=45)
+    plots['line_plot'] = save_plot(fig, 'line_plot.svg')
+
+    return plots
+
+def save_plot(fig, filename, limite=65536):
+    dpi = fig.get_dpi()
+    largura, altura = fig.get_size_inches()
+    largura_px = largura * dpi
+    altura_px = altura * dpi
+
+    # Ajustar dimensões se exceder o limite
+    if largura_px > limite or altura_px > limite:
+        fator = min(limite / largura_px, limite / altura_px)
+        largura_ajustada = largura * fator
+        altura_ajustada = altura * fator
+        print(f"Ajustando gráfico: {largura_px}x{altura_px} px → "
+              f"{int(largura_ajustada * dpi)}x{int(altura_ajustada * dpi)} px")
+        fig.set_size_inches(largura_ajustada, altura_ajustada)
+
+    path = os.path.join('static', filename)
+    fig.savefig(path, bbox_inches='tight', format='svg')
+    plt.close(fig)
+    return path
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
