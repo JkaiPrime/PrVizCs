@@ -110,15 +110,15 @@
                 </section>
                 {% endif %}
 
-                {% if bar_plot  %}
-                <section class="mt-4 text-center">
-                    <h2>Gráficos Adicionais:</h2>
-                    <img src="{{ bar_plot }}" alt="Bar Plot">
-                    <img src="{{ box_plot }}" alt="Box Plot">
-                    <img src="{{ violin_plot }}" alt="Violin Plot">
-                    <img src="{{ scatter_plot }}" alt="Scatter Plot">
-                    <img src="{{ line_plot }}" alt="Line Plot">
-                </section>
+                {% if bar_plot %}
+                    <section class="mt-4 text-center">
+                        <h2 class="mb-3" style="color: white;">Gráficos Adicionais</h2>
+                        {% if bar_plot %}<img src="{{ bar_plot }}" alt="Bar Plot" class="img-fluid">{% endif %}
+                        {% if box_plot %}<img src="{{ box_plot }}" alt="Box Plot" class="img-fluid">{% endif %}
+                        {% if scatter_plot %}<img src="{{ scatter_plot }}" alt="Scatter Plot" class="img-fluid">{% endif %}
+                        {% if violin_plot %}<img src="{{ violin_plot }}" alt="Violin Plot" class="img-fluid">{% endif %}
+                        {% if line_plot %}<img src="{{ line_plot }}" alt="Line Plot" class="img-fluid">{% endif %}
+                    </section>
                 {% endif %}
 
                 <div class="text-center mt-4">

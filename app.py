@@ -2,45 +2,133 @@ from flask import Flask, render_template, request, redirect, send_file, url_for
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns # type: ignore
-from sklearn.ensemble import RandomForestClassifier
-import joblib
+import seaborn as sns  # type: ignore
+import datetime
 import logging
-
+from sklearn.impute import SimpleImputer
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.impute import SimpleImputer
-
+import joblib
 
 # Configuração básica do log
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("train_log.log"),
+        logging.FileHandler("app.log"),
         logging.StreamHandler()
     ]
 )
 
+# Configurações do Flask
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MODEL_FOLDER'] = 'models'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['MODEL_FOLDER'], exist_ok=True)
 
+# Função auxiliar para salvar gráficos otimizados
+def save_plot(fig, filename, limite=65536):
+    dpi = fig.get_dpi()
+    largura, altura = fig.get_size_inches()
+    largura_px = largura * dpi
+    altura_px = altura * dpi
+
+    if largura_px > limite or altura_px > limite:
+        fator = min(limite / largura_px, limite / altura_px)
+        largura_ajustada = largura * fator
+        altura_ajustada = altura * fator
+        logging.info(f"Ajustando gráfico para {int(largura_ajustada * dpi)}x{int(altura_ajustada * dpi)} px")
+        fig.set_size_inches(largura_ajustada, altura_ajustada)
+
+    path = os.path.join('static', filename)
+    fig.savefig(path, bbox_inches='tight', format='png')
+    plt.close(fig)
+    return path
+
+def save_additional_plots(data):
+    """
+    Gera gráficos adicionais para análise, como scatter plots, violin plots e gráficos de linha.
+    """
+    plots = {}
+
+    # Limitar o número de pontos para gráficos grandes
+    max_points = 5000
+    if len(data) > max_points:
+        logging.info(f"Reduzindo tamanho do DataFrame para {max_points} pontos.")
+        data = data.sample(n=max_points, random_state=42)
+
+    try:
+        # Gráfico de barras
+        if 'rating' in data.columns and 'metacritic' in data.columns:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.barplot(x='rating', y='metacritic', data=data, ax=ax)
+            ax.set_title('Média de Metacritic por Rating')
+            plots['bar_plot'] = save_plot(fig, 'bar_plot.png')
+        else:
+            logging.warning("Colunas 'rating' ou 'metacritic' ausentes para o gráfico de barras.")
+
+        # Boxplot
+        if 'rating_top' in data.columns and 'playtime' in data.columns:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.boxplot(x='rating_top', y='playtime', data=data, ax=ax)
+            ax.set_title('Distribuição de Playtime por Rating Top')
+            plots['box_plot'] = save_plot(fig, 'box_plot.png')
+        else:
+            logging.warning("Colunas 'rating_top' ou 'playtime' ausentes para o boxplot.")
+
+        # Scatterplot
+        if 'achievements_count' in data.columns and 'playtime' in data.columns and 'platforms' in data.columns:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.scatterplot(x='achievements_count', y='playtime', hue='platforms', data=data, ax=ax, palette='viridis')
+            ax.set_title('Conquistas vs Playtime por Plataforma')
+            plots['scatter_plot'] = save_plot(fig, 'scatter_plot.png')
+        else:
+            logging.warning("Colunas 'achievements_count', 'playtime' ou 'platforms' ausentes para o scatterplot.")
+
+        # Violinplot
+        if 'genres' in data.columns and 'suggestions_count' in data.columns:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.violinplot(x='genres', y='suggestions_count', data=data, ax=ax)
+            ax.set_title('Distribuição de Sugestões por Gênero')
+            plt.xticks(rotation=90)
+            plots['violin_plot'] = save_plot(fig, 'violin_plot.png')
+        else:
+            logging.warning("Colunas 'genres' ou 'suggestions_count' ausentes para o violin plot.")
+
+        # Linha
+        if 'released' in data.columns and 'reviews_count' in data.columns:
+            data['released'] = pd.to_datetime(data['released'], errors='coerce')
+            data = data.sort_values('released')
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.lineplot(x='released', y='reviews_count', data=data, ax=ax)
+            ax.set_title('Tendência de Reviews ao Longo do Tempo')
+            plt.xticks(rotation=45)
+            plots['line_plot'] = save_plot(fig, 'line_plot.png')
+        else:
+            logging.warning("Colunas 'released' ou 'reviews_count' ausentes para o gráfico de linha.")
+
+    except Exception as e:
+        logging.error(f"Erro ao gerar gráficos adicionais: {e}")
+
+    return plots
+
+# Página inicial
 @app.route('/')
 def index():
     return render_template('index.html')
 
+# Upload de arquivo CSV
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
         return "Nenhum arquivo enviado.", 400
 
     file = request.files['file']
-    column = request.form['column']
+    column = request.form.get('column', None)
     if file.filename == '':
         return "Nome do arquivo inválido.", 400
 
@@ -51,232 +139,132 @@ def upload_file():
 
     return "Formato de arquivo inválido. Envie um arquivo CSV.", 400
 
+# Análise de dados e geração de gráficos
 @app.route('/analyze/<filename>')
 def analyze(filename):
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    column = request.args.get('column') 
-    
+    column = request.args.get('column', None)
+
     try:
         # Carregar o CSV
         df = pd.read_csv(filepath)
-        
-        # Gerar estatísticas descritivas em HTML
+
+        # Gerar estatísticas descritivas
         stats = df.describe(include='all').to_html(classes='table table-striped', border=0)
 
         # Seleção de dados numéricos
         numeric_df = df.select_dtypes(include=['number'])
 
-        # Caminhos para salvar gráficos
+        # Caminhos únicos para os gráficos
+        timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
         correlation_plot_path = None
         histogram_plot_path = None
 
         # Heatmap de correlação
         if not numeric_df.empty:
-            correlation_plot_path = os.path.join('static', f'correlation_{filename}.png')
+            correlation_plot_path = f'correlation_{timestamp}.png'
             plt.figure(figsize=(10, 8))
             sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt='.2f')
             plt.title('Mapa de Correlação')
-            plt.savefig(correlation_plot_path)
+            plt.savefig(os.path.join('static', correlation_plot_path))
             plt.close()
 
-        if filename == "game_info.csv":
-            additional_plots = save_additional_plots(df)
-
-        # Histograma da coluna, se existir
-        if column in df.columns:
-            histogram_plot_path = os.path.join('static', f'histogram_{filename}.png')
+        # Histograma da coluna, se fornecida
+        if column and column in df.columns:
+            histogram_plot_path = f'histogram_{timestamp}.png'
             plt.figure(figsize=(10, 6))
             sns.histplot(df[column], kde=True, bins=30, color='skyblue')
             plt.title(f'Distribuição da coluna: {column}')
             plt.xlabel(column)
             plt.ylabel('Frequência')
-            plt.savefig(histogram_plot_path)
+            plt.savefig(os.path.join('static', histogram_plot_path))
             plt.close()
 
-        # Renderizar página com resultados
+        # Gráficos adicionais
+        additional_plots = save_additional_plots(df)
+
+        # Renderizar a página com os gráficos
         return render_template(
             'analyze.html',
             stats=stats,
-            correlation_plot=correlation_plot_path,
-            histogram_plot=histogram_plot_path,
-            bar_plot=additional_plots['bar_plot'],
-            box_plot=additional_plots['box_plot'],
-            violin_plot=additional_plots['violin_plot'],
-            scatter_plot=additional_plots['scatter_plot'],
-            line_plot=additional_plots['line_plot'],
-            filename=filename
+            correlation_plot=url_for('static', filename=correlation_plot_path) if correlation_plot_path else None,
+            histogram_plot=url_for('static', filename=histogram_plot_path) if histogram_plot_path else None,
+            bar_plot=url_for('static', filename="bar_plot.png"),
+            box_plot=url_for('static', filename="box_plot.png"),
+            scatter_plot=url_for('static', filename="scatter_plot.png"),
+            violin_plot=url_for('static', filename="violin_plot.png"),
+            line_plot=url_for('static', filename="line_plot.png"),
+            filename=filename,
+            timestamp=timestamp
         )
 
     except Exception as e:
+        logging.error(f"Erro ao analisar os dados: {e}")
         return f"Erro ao analisar os dados: {e}", 500
 
+
+# Treinamento de modelo
 @app.route('/train/<filename>', methods=['GET', 'POST'])
 def train(filename):
-    logging.info(f"Iniciando o treinamento com o arquivo: {filename}")
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
     try:
         df = pd.read_csv(filepath)
-        logging.info("Arquivo CSV carregado com sucesso.")
-    except Exception as e:
-        logging.error(f"Erro ao carregar o arquivo CSV: {e}")
-        return f"Erro ao carregar o arquivo CSV: {e}", 500
-
-    # Separar características (X) e alvo (y)
-    try:
         X = df.iloc[:, :-1]
         y = df.iloc[:, -1]
-        logging.info("Separação de características (X) e alvo (y) concluída.")
-    except Exception as e:
-        logging.error(f"Erro ao separar X e y: {e}")
-        return f"Erro ao processar os dados: {e}", 500
 
-    # Pré-processamento: lidar com colunas categóricas
-    try:
-        # Pré-processamento: lidar com colunas categóricas
-        for column in X.select_dtypes(include='object').columns:
-            X[column] = X[column].astype('category').cat.codes
-
-        # Lidando com valores ausentes
-        imputer = SimpleImputer(strategy='mean')  # Ou 'median' ou 'most_frequent'
+        imputer = SimpleImputer(strategy='mean')
         X = pd.DataFrame(imputer.fit_transform(X), columns=X.columns)
 
         if y.dtype == 'object':
             y = y.astype('category').cat.codes
-        logging.info("Pré-processamento de colunas categóricas concluído.")
-    except Exception as e:
-        logging.error(f"Erro durante o pré-processamento: {e}")
-        return f"Erro durante o pré-processamento: {e}", 500
 
-    if request.method == 'POST':
-        model_type = request.form.get('model_type', 'RandomForest')
-        logging.info(f"Modelo selecionado: {model_type}")
+        if request.method == 'POST':
+            model_type = request.form.get('model_type', 'RandomForest')
+            logging.info(f"Modelo selecionado: {model_type}")
 
-        try:
-            # Selecionar e configurar o modelo
             if model_type == 'RandomForest':
                 n_estimators = int(request.form.get('n_estimators', 100))
                 model = RandomForestClassifier(n_estimators=n_estimators, random_state=42)
-                logging.info(f"Configurando Random Forest com {n_estimators} estimadores.")
-            
+            elif model_type == 'LogisticRegression':
+                model = LogisticRegression(max_iter=500)
             elif model_type == 'KNN':
                 n_neighbors = int(request.form.get('n_neighbors', 5))
                 model = KNeighborsClassifier(n_neighbors=n_neighbors)
-                logging.info(f"Configurando K-Nearest Neighbors com {n_neighbors} vizinhos.")
-            
-            elif model_type == 'LogisticRegression':
-                model = LogisticRegression(max_iter=500)
-                logging.info("Configurando Regressão Logística.")
-            
             elif model_type == 'SVM':
                 kernel = request.form.get('kernel', 'rbf')
                 model = SVC(kernel=kernel, random_state=42)
-                logging.info(f"Configurando SVM com kernel: {kernel}.")
-            
             elif model_type == 'DecisionTree':
-                max_depth = int(request.form.get('max_depth', None)) if request.form.get('max_depth') else None
-                model = DecisionTreeClassifier(max_depth=max_depth, random_state=42)
-                logging.info(f"Configurando Árvore de Decisão com profundidade máxima: {max_depth}.")
-            
+                max_depth = request.form.get('max_depth', None)
+                model = DecisionTreeClassifier(max_depth=int(max_depth) if max_depth else None, random_state=42)
             else:
-                logging.warning(f"Modelo '{model_type}' não suportado.")
                 return f"Modelo '{model_type}' não suportado.", 400
 
-            # Treinamento do modelo
             model.fit(X, y)
             accuracy = model.score(X, y)
-            logging.info(f"Treinamento concluído. Acurácia: {accuracy:.2f}")
 
-            # Salvar o modelo treinado
-            model_filename = f"{model_type}_model.pkl"
+            model_filename = f"{model_type}_model_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pkl"
             model_path = os.path.join(app.config['MODEL_FOLDER'], model_filename)
             joblib.dump(model, model_path)
-            logging.info(f"Modelo salvo em: {model_path}")
 
-            # Renderizar resultados
             return render_template(
                 'train_result.html',
                 accuracy=accuracy,
                 model_type=model_type,
-                model_path=url_for('download_model', model_type=model_type, filename=filename),  # Adição do filename
-                filename=filename  # Adicionando filename ao contexto
+                model_path=url_for('download_model', model_filename=model_filename),
+                filename=filename
             )
 
+        return render_template('train_form.html', filename=filename)
 
-        except Exception as e:
-            logging.error(f"Erro durante o treinamento do modelo '{model_type}': {e}")
-            return f"Erro durante o treinamento: {e}", 500
+    except Exception as e:
+        logging.error(f"Erro ao treinar o modelo: {e}")
+        return f"Erro ao treinar o modelo: {e}", 500
 
-    return render_template('train_form.html', filename=filename)
-
-@app.route('/predict', methods=['GET', 'POST'])
-def predict():
-    if request.method == 'POST':
-        # Verificar se os arquivos foram enviados
-        if 'data_file' not in request.files or 'model_file' not in request.files:
-            return "Arquivos de dados ou modelo ausentes.", 400
-
-        data_file = request.files['data_file']
-        model_file = request.files['model_file']
-
-        # Validar os nomes dos arquivos
-        if data_file.filename == '' or model_file.filename == '':
-            return "Nome do arquivo inválido.", 400
-
-        # Verificar formatos de arquivos
-        if not data_file.filename.endswith('.csv') or not model_file.filename.endswith('.pkl'):
-            return "Formato de arquivo inválido. Envie um arquivo CSV para dados e um arquivo PKL para o modelo.", 400
-
-        # Salvar os arquivos no servidor
-        data_filepath = os.path.join(app.config['UPLOAD_FOLDER'], data_file.filename)
-        model_filepath = os.path.join(app.config['UPLOAD_FOLDER'], model_file.filename)
-        data_file.save(data_filepath)
-        model_file.save(model_filepath)
-
-        try:
-            # Carregar o arquivo de dados
-            df = pd.read_csv(data_filepath)
-
-            # Carregar o modelo
-            model = joblib.load(model_filepath)
-
-            # Pré-processamento dos dados (igual ao usado no treinamento)
-            for column in df.select_dtypes(include='object').columns:
-                df[column] = df[column].astype('category').cat.codes
-
-            # Fazer predições
-            predictions = model.predict(df)
-
-            # Adicionar predições ao DataFrame
-            df['Prediction'] = predictions
-
-            # Salvar os resultados em um arquivo CSV
-            result_path = os.path.join(app.config['UPLOAD_FOLDER'], 'predictions.csv')
-            df.to_csv(result_path, index=False)
-
-            return send_file(result_path, as_attachment=True)
-
-        except Exception as e:
-            return f"Erro ao realizar a predição: {e}", 500
-
-    return render_template('predict.html')
-
-@app.route('/download_model/<model_type>/<filename>', methods=['GET'])
-def download_model(model_type, filename):
-    # Construir o caminho completo para o arquivo do modelo
-    model_filename = f"{model_type}_model.pkl"
-    model_filepath = os.path.join(app.config['MODEL_FOLDER'], model_filename)
-
-    # Verificar se o modelo existe antes de tentar baixá-lo
-    if os.path.exists(model_filepath):
-        return send_file(model_filepath, as_attachment=True)
-    else:
-        return f"Erro: O modelo '{model_type}' não foi encontrado. Certifique-se de que ele foi treinado primeiro.", 404
-
+# Upload de novo CSV para treino
 @app.route('/upload_new_csv/<filename>', methods=['GET', 'POST'])
 def upload_new_csv(filename):
     if request.method == 'POST':
-        # Verificar se um novo arquivo foi enviado
         if 'file' not in request.files:
             return "Nenhum arquivo enviado.", 400
         
@@ -287,72 +275,62 @@ def upload_new_csv(filename):
         if file and file.filename.endswith('.csv'):
             new_filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
             file.save(new_filepath)
-
-            # Redirecionar para o treinamento com o novo arquivo
             return redirect(url_for('train', filename=file.filename))
 
         return "Formato de arquivo inválido. Envie um arquivo CSV.", 400
 
     return render_template('upload_new_csv.html', filename=filename)
 
-def save_additional_plots(data):
-    plots = {}
+# Predição com modelo treinado
+@app.route('/predict', methods=['GET', 'POST'])
+def predict():
+    if request.method == 'POST':
+        if 'data_file' not in request.files or 'model_file' not in request.files:
+            return "Arquivos de dados ou modelo ausentes.", 400
 
-    # Gráfico de barras
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.barplot(x='rating', y='metacritic', data=data, ax=ax)
-    ax.set_title('Média de Metacritic por Rating')
-    plots['bar_plot'] = save_plot(fig, 'bar_plot.svg')
+        data_file = request.files['data_file']
+        model_file = request.files['model_file']
 
-    # Boxplot
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(x='rating_top', y='playtime', data=data, ax=ax)
-    ax.set_title('Distribuição de Playtime por Rating Top')
-    plots['box_plot'] = save_plot(fig, 'box_plot.svg')
+        if data_file.filename == '' or model_file.filename == '':
+            return "Nome do arquivo inválido.", 400
 
-    # Scatterplot
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.scatterplot(x='achievements_count', y='playtime', hue='platforms', data=data, ax=ax, palette='viridis')
-    ax.set_title('Conquistas vs Playtime por Plataforma')
-    plots['scatter_plot'] = save_plot(fig, 'scatter_plot.svg')
+        if not data_file.filename.endswith('.csv') or not model_file.filename.endswith('.pkl'):
+            return "Formato de arquivo inválido. Envie um arquivo CSV e um modelo PKL.", 400
 
-    # Violinplot
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.violinplot(x='genres', y='suggestions_count', data=data, ax=ax)
-    ax.set_title('Distribuição de Sugestões por Gênero')
-    plt.xticks(rotation=90)
-    plots['violin_plot'] = save_plot(fig, 'violin_plot.svg')
+        data_filepath = os.path.join(app.config['UPLOAD_FOLDER'], data_file.filename)
+        model_filepath = os.path.join(app.config['UPLOAD_FOLDER'], model_file.filename)
+        data_file.save(data_filepath)
+        model_file.save(model_filepath)
 
-    # Linha
-    fig, ax = plt.subplots(figsize=(10, 6))
-    data['released'] = pd.to_datetime(data['released'], errors='coerce')
-    data = data.sort_values('released')
-    sns.lineplot(x='released', y='reviews_count', data=data, ax=ax)
-    ax.set_title('Tendência de Reviews ao Longo do Tempo')
-    plt.xticks(rotation=45)
-    plots['line_plot'] = save_plot(fig, 'line_plot.svg')
+        try:
+            df = pd.read_csv(data_filepath)
+            model = joblib.load(model_filepath)
 
-    return plots
+            for column in df.select_dtypes(include='object').columns:
+                df[column] = df[column].astype('category').cat.codes
 
-def save_plot(fig, filename, limite=65536):
-    dpi = fig.get_dpi()
-    largura, altura = fig.get_size_inches()
-    largura_px = largura * dpi
-    altura_px = altura * dpi
+            predictions = model.predict(df)
+            df['Prediction'] = predictions
 
-    # Ajustar dimensões se exceder o limite
-    if largura_px > limite or altura_px > limite:
-        fator = min(limite / largura_px, limite / altura_px)
-        largura_ajustada = largura * fator
-        altura_ajustada = altura * fator
-        print(f"Ajustando gráfico: {largura_px}x{altura_px} px → "
-              f"{int(largura_ajustada * dpi)}x{int(altura_ajustada * dpi)} px")
-        fig.set_size_inches(largura_ajustada, altura_ajustada)
+            result_path = os.path.join(app.config['UPLOAD_FOLDER'], 'predictions.csv')
+            df.to_csv(result_path, index=False)
+            return send_file(result_path, as_attachment=True)
 
-    path = os.path.join('static', filename)
-    fig.savefig(path, bbox_inches='tight', format='svg')
-    plt.close(fig)
-    return path
+        except Exception as e:
+            logging.error(f"Erro ao realizar a predição: {e}")
+            return f"Erro ao realizar a predição: {e}", 500
+
+    return render_template('predict.html')
+
+# Download de modelo treinado
+@app.route('/download_model/<model_filename>', methods=['GET'])
+def download_model(model_filename):
+    model_filepath = os.path.join(app.config['MODEL_FOLDER'], model_filename)
+
+    if os.path.exists(model_filepath):
+        return send_file(model_filepath, as_attachment=True)
+    else:
+        return f"Modelo '{model_filename}' não encontrado.", 404
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
