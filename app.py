@@ -67,6 +67,8 @@ def save_additional_plots(data):
             fig, ax = plt.subplots(figsize=(10, 6))
             sns.barplot(x='rating', y='metacritic', data=data, ax=ax)
             ax.set_title('Média de Metacritic por Rating')
+            x_labels = ax.get_xticks()
+            ax.set_xticks(x_labels[::4])
             plots['bar_plot'] = save_plot(fig, 'bar_plot.png')
         else:
             logging.warning("Colunas 'rating' ou 'metacritic' ausentes para o gráfico de barras.")
@@ -83,8 +85,15 @@ def save_additional_plots(data):
         # Scatterplot
         if 'achievements_count' in data.columns and 'playtime' in data.columns and 'platforms' in data.columns:
             fig, ax = plt.subplots(figsize=(10, 6))
-            sns.scatterplot(x='achievements_count', y='playtime', hue='platforms', data=data, ax=ax, palette='viridis')
+            
+            # Define limite para o eixo Y (opcionalmente ajustável)
+            max_playtime = 10  # Substituir pelo valor máximo desejado
+            filtered_data = data[data['playtime'] <= max_playtime]
+
+            sns.scatterplot(x='achievements_count', y='playtime', hue='platforms', data=filtered_data, ax=ax, palette='viridis')
             ax.set_title('Conquistas vs Playtime por Plataforma')
+            ax.set_ylim(0, max_playtime)  # Limita o eixo Y no gráfico
+            ax.legend().remove()
             plots['scatter_plot'] = save_plot(fig, 'scatter_plot.png')
         else:
             logging.warning("Colunas 'achievements_count', 'playtime' ou 'platforms' ausentes para o scatterplot.")
@@ -94,6 +103,7 @@ def save_additional_plots(data):
             fig, ax = plt.subplots(figsize=(10, 6))
             sns.violinplot(x='genres', y='suggestions_count', data=data, ax=ax)
             ax.set_title('Distribuição de Sugestões por Gênero')
+            ax.legend().remove()
             plt.xticks(rotation=90)
             plots['violin_plot'] = save_plot(fig, 'violin_plot.png')
         else:
