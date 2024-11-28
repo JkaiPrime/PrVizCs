@@ -334,15 +334,30 @@ def predict():
         model_file.save(model_filepath)
 
         try:
+            # Carregar os dados e o modelo
             df = pd.read_csv(data_filepath)
             model = joblib.load(model_filepath)
 
+            # Verificar as colunas esperadas pelo modelo
+            expected_columns = model.feature_names_in_
+            missing_columns = [col for col in expected_columns if col not in df.columns]
+            extra_columns = [col for col in df.columns if col not in expected_columns]
+
+            if missing_columns:
+                return f"As seguintes colunas estão ausentes no arquivo enviado: {missing_columns}", 400
+
+            # Reordenar e alinhar colunas
+            df = df[expected_columns]
+
+            # Processar dados categóricos, se necessário
             for column in df.select_dtypes(include='object').columns:
                 df[column] = df[column].astype('category').cat.codes
 
+            # Fazer predições
             predictions = model.predict(df)
             df['Prediction'] = predictions
 
+            # Salvar resultados
             result_path = os.path.join(app.config['UPLOAD_FOLDER'], 'predictions.csv')
             df.to_csv(result_path, index=False)
             return send_file(result_path, as_attachment=True)
@@ -352,6 +367,8 @@ def predict():
             return f"Erro ao realizar a predição: {e}", 500
 
     return render_template('predict.html')
+
+
 
 # Download de modelo treinado
 @app.route('/download_model/<model_filename>', methods=['GET'])
