@@ -100,11 +100,22 @@ def save_additional_plots(data):
 
         # Violinplot
         if 'genres' in data.columns and 'suggestions_count' in data.columns:
+            genre_counts = data.groupby('genres')['suggestions_count'].sum().reset_index()
+
+            # Ordenar os gêneros pela soma das sugestões e pegar os X mais frequentes
+            top_genres = genre_counts.nlargest(15, 'suggestions_count')['genres']
+
+            # Filtrar os dados para incluir apenas os top 10 gêneros
+            filtered_data = data[data['genres'].isin(top_genres)]
+
+            # Criar o gráfico
             fig, ax = plt.subplots(figsize=(10, 6))
-            sns.violinplot(x='genres', y='suggestions_count', data=data, ax=ax)
+            sns.violinplot(x='genres', y='suggestions_count', data=filtered_data, ax=ax)
             ax.set_title('Distribuição de Sugestões por Gênero')
             ax.legend().remove()
             plt.xticks(rotation=90)
+
+            # Salvar o gráfico
             plots['violin_plot'] = save_plot(fig, 'violin_plot.png')
         else:
             logging.warning("Colunas 'genres' ou 'suggestions_count' ausentes para o violin plot.")
