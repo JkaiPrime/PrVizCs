@@ -223,8 +223,29 @@ def train(filename):
         X = df.iloc[:, :-1]
         y = df.iloc[:, -1]
 
-        imputer = SimpleImputer(strategy='mean')
-        X = pd.DataFrame(imputer.fit_transform(X), columns=X.columns)
+                # Separar dados numéricos e categóricos
+        numeric_columns = X.select_dtypes(include=['number']).columns
+        categorical_columns = X.select_dtypes(exclude=['number']).columns
+
+        # Preenchimento de valores ausentes
+        numeric_imputer = SimpleImputer(strategy='mean')
+        categorical_imputer = SimpleImputer(strategy='most_frequent')
+
+        # Aplicar imputação
+        X_numeric = pd.DataFrame(numeric_imputer.fit_transform(X[numeric_columns]), columns=numeric_columns)
+        X_categorical = pd.DataFrame(categorical_imputer.fit_transform(X[categorical_columns]), columns=categorical_columns)
+
+        # Codificar dados categóricos
+        for column in X_categorical.columns:
+            X_categorical[column] = X_categorical[column].astype('category').cat.codes
+
+        # Combinar dados processados
+        X = pd.concat([X_numeric, X_categorical], axis=1)
+
+        # Se o alvo (y) for categórico, codificá-lo
+        if y.dtype == 'object':
+            y = y.astype('category').cat.codes
+
 
         if y.dtype == 'object':
             y = y.astype('category').cat.codes
