@@ -152,7 +152,7 @@ def upload_file():
     column = request.form.get('column', None)
     if file.filename == '':
         return "Nome do arquivo inválido.", 400
-
+    
     if file and file.filename.endswith('.csv'):
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(filepath)

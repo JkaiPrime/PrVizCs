@@ -52,16 +52,23 @@
             <div class="card-body">
                 <form action="/predict" method="POST" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <label for="data_file" class="form-label">Faça upload do arquivo CSV com os dados:</label>
+                        <label for="data_file" class="form-label" style="color:white">Faça upload do arquivo CSV com os dados:</label>
                         <input type="file" class="form-control" id="data_file" name="data_file" accept=".csv" required>
                     </div>
                     <div class="mb-3">
-                        <label for="model_file" class="form-label">Faça upload do modelo treinado (.pkl):</label>
+                        <label for="model_file" class="form-label" style="color:white">Faça upload do modelo treinado (.pkl):</label>
                         <input type="file" class="form-control" id="model_file" name="model_file" accept=".pkl" required>
                     </div>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-upload"></i> Fazer Predição
                     </button>
+
+                    <!-- Botão de Voltar -->
+                    <div class="text-center mt-4">
+                        <a href="/" class="btn btn-primary me-2 mt-2">
+                            <i class="fas fa-arrow-left"></i> Voltar à página inicial
+                        </a>
+                    </div>
                 </form>
             </div>
         </div>
